@@ -91,7 +91,7 @@ public class InvertedPendulum extends LinearOpMode {
             output = kp * error + ki * integral + kd * derivative;
             lastError = error;
 
-            // Clamp motor power (FTC motors accept power from -1 to 1)
+            // Clamp motor power (motors accept power from -1 to 1)
             double power = Math.max(-1.0, Math.min(1.0, output / 5000000.0));
 
             motor.setPower(outputDir * power);
