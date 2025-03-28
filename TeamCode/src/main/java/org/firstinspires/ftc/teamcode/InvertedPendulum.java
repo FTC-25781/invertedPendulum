@@ -15,38 +15,28 @@ public class InvertedPendulum extends LinearOpMode {
     DigitalChannel leftLimit;
     DigitalChannel rightLimit;
 
-    private double setPoint = 0;
-    private double output = 0;
+    private double setPoint = 0.0;
+    private double targetPosition = 0.0;
+    private double Kp = 50.0;
+    private double Ki = 0.0;
+    private double Kd = 1.0;
 
-    private double kp, ki, kd;
-
-    private double integral = 0;
-    private double derivative = 0;
-    private double lastError = 0;
-
-    private ElapsedTime timer = new ElapsedTime();
+    private double integral = 0.0;
+    private double lastError = 0.0;
+    private long lastTime = 0;
 
     @Override
     public void runOpMode() throws InterruptedException {
         motor = hardwareMap.get(DcMotorEx.class, "motor");
-//        encoderMotor = hardwareMap.get(DcMotorEx.class, "encoderMotor");
         leftLimit = hardwareMap.get(DigitalChannel.class, "leftLimit");
         rightLimit = hardwareMap.get(DigitalChannel.class, "rightLimit");
 
-        // Reset encoders
-//        encoderMotor.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
-//        encoderMotor.setMode(DcMotorEx.RunMode.RUN_WITHOUT_ENCODER);
-
-        // Inversion logic and gains
-            kp = 10.00;
-            ki = 0.00;
-            kd = 0.00;
 
         waitForStart();
 
         motor.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
         motor.setMode(DcMotorEx.RunMode.RUN_USING_ENCODER);
-        timer.reset();
+        lastTime = System.currentTimeMillis();
 
         while (opModeIsActive() && leftLimit.getState() && rightLimit.getState()) {
             int encoderCount = motor.getCurrentPosition();
@@ -54,11 +44,15 @@ public class InvertedPendulum extends LinearOpMode {
             double error = setPoint - encoderCount;
 
             // Basic PID calculation
-            integral += error;
-            derivative = (error - lastError);
+            long currentTime = System.currentTimeMillis();
+            double deltaTime = (currentTime - lastTime) / 1000.0;
 
-            output = kp * error + ki * integral + kd * derivative;
+            integral += error * deltaTime;
+            double derivative = (error - lastError) / deltaTime;
+            double output = Kp * error + Ki * integral + Kd * derivative;
+
             lastError = error;
+            lastTime = currentTime;
 
             // Clamp motor power (motors accept power from -1 to 1)
             double power = Math.max(-1.0, Math.min(1.0, output/100));
