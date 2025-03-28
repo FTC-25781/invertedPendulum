@@ -26,7 +26,7 @@ public class ballBalancer extends LinearOpMode {
     private double kP = 0.001;
     private double kI = 0.0;
     private double kD = 0.0;
-
+//
     private double targetDistance = 10.0;
     private double previousError = 0;
     private double integral = 0;
