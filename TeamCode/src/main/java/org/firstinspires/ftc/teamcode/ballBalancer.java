@@ -5,15 +5,12 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.Servo;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 import com.qualcomm.robotcore.hardware.DistanceSensor;
-import com.qualcomm.robotcore.hardware.DigitalChannel;
 
 @TeleOp(name = "PID Distance Servo Control")
 public class ballBalancer extends LinearOpMode {
 
     private DistanceSensor distanceSensor;
     private Servo beamServo;
-    private DigitalChannel limitSwitch;
-
     static double minPositionForServo = 0.36;
 
     static double maxPositionForServo = 0.66;
@@ -23,10 +20,10 @@ public class ballBalancer extends LinearOpMode {
     private double increment = 0.01;
 
     // PID coefficients
-    private double kP = 0.001;
+    private double kP = 0.0001; // 0.001
     private double kI = 0.0;
-    private double kD = 0.0;
-//
+    private double kD = 0.01;
+
     private double targetDistance = 10.0;
     private double previousError = 0;
     private double integral = 0;
@@ -37,10 +34,6 @@ public class ballBalancer extends LinearOpMode {
     public void runOpMode(){
         distanceSensor = hardwareMap.get(DistanceSensor.class, "distanceSensor");
         beamServo = hardwareMap.get(Servo.class, "beamServo");
-        /*
-        limitSwitch = hardwareMap.get(DigitalChannel.class, "limit_switch");
-        limitSwitch.setMode(DigitalChannel.Mode.INPUT);
-        */
 
         telemetry.addData("Status", "Initialized");
         telemetry.update();
@@ -48,15 +41,13 @@ public class ballBalancer extends LinearOpMode {
         waitForStart();
 
         while(opModeIsActive()){
-//            if (!limitSwitch.getState()) {
-//                telemetry.addData("Safety", "Limit Switch Activated - Stopping the System");
-//                telemetry.update();
-//                stop();
-//                return;
-//            }
+
             // PID Part
             double currentDistance = distanceSensor.getDistance(DistanceUnit.CM);
             double error = targetDistance - currentDistance;
+            if(Math.abs(error) < 1) {
+                error = 0;
+            }
             integral += error;
             double derivative = error - previousError;
             previousError = error;

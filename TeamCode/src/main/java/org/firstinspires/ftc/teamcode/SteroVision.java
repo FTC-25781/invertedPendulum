@@ -17,15 +17,18 @@ public class SteroVision extends LinearOpMode {
 
     @Override
     public void runOpMode() {
-        int cameraMonitorViewId = hardwareMap.appContext.getResources().getIdentifier("cameraMonitorViewId", "id", hardwareMap.appContext.getPackageName());
 
-        OpenCvCamera leftCamera = OpenCvCameraFactory.getInstance().createWebcam(hardwareMap.get(WebcamName.class, "LeftCamera"), cameraMonitorViewId);
-        OpenCvCamera rightCamera = OpenCvCameraFactory.getInstance().createWebcam(hardwareMap.get(WebcamName.class, "RightCamera"), cameraMonitorViewId);
+        int leftCameraMonitorViewId = hardwareMap.appContext.getResources().getIdentifier("cameraMonitorViewId", "id", hardwareMap.appContext.getPackageName());
+        int rightCameraMonitorViewId = hardwareMap.appContext.getResources().getIdentifier("cameraMonitorViewId", "id", hardwareMap.appContext.getPackageName());
+
+        OpenCvCamera leftCamera = OpenCvCameraFactory.getInstance().createWebcam(hardwareMap.get(WebcamName.class, "leftCam"), leftCameraMonitorViewId);
+        OpenCvCamera rightCamera = OpenCvCameraFactory.getInstance().createWebcam(hardwareMap.get(WebcamName.class, "rightCam"), rightCameraMonitorViewId);
 
         leftCamera.openCameraDevice();
         rightCamera.openCameraDevice();
 
         StereoProcessor processor = new StereoProcessor();
+
         leftCamera.setPipeline(processor.leftPipeline);
         rightCamera.setPipeline(processor.rightPipeline);
 
@@ -35,9 +38,10 @@ public class SteroVision extends LinearOpMode {
         waitForStart();
 
         while (opModeIsActive()) {
+            // Display a message on the driver station
             telemetry.addLine("Streaming from both cameras...");
             telemetry.update();
-            sleep(100);
+            sleep(100);  // Sleep for 100ms to reduce CPU load
         }
 
         leftCamera.stopStreaming();
@@ -62,11 +66,16 @@ public class SteroVision extends LinearOpMode {
             public Mat processFrame(Mat input) {
                 input.copyTo(rightImage);
                 if (!leftImage.empty() && !rightImage.empty()) {
+                    // Convert to grayscale
                     Imgproc.cvtColor(leftImage, leftImage, Imgproc.COLOR_RGB2GRAY);
                     Imgproc.cvtColor(rightImage, rightImage, Imgproc.COLOR_RGB2GRAY);
 
-                    StereoBM stereoBM = StereoBM.create(16, 15);  // Parameters can be tuned
+                    // Compute disparity map
+                    StereoBM stereoBM = StereoBM.create(16, 15);
                     stereoBM.compute(leftImage, rightImage, disparity);
+
+                    // Apply a color map to visualize the disparity map
+                    Imgproc.applyColorMap(disparity, disparity, Imgproc.COLORMAP_JET);
                 }
                 return input;
             }
