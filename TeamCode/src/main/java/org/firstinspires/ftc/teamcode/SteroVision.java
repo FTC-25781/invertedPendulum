@@ -1,14 +1,26 @@
+package org.firstinspires.ftc.teamcode;
+
+import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+
+import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
+import org.opencv.calib3d.StereoBM;
+import org.opencv.core.Mat;
+import org.opencv.imgproc.Imgproc;
+import org.openftc.easyopencv.OpenCvCamera;
+import org.openftc.easyopencv.OpenCvCameraFactory;
+import org.openftc.easyopencv.OpenCvCameraRotation;
+import org.openftc.easyopencv.OpenCvPipeline;
+
 @TeleOp(name = "Stereo Vision Demo")
 public class SteroVision extends LinearOpMode {
-    private OpenCvCamera leftCamera;
-    private OpenCvCamera rightCamera;
 
     @Override
     public void runOpMode() {
         int cameraMonitorViewId = hardwareMap.appContext.getResources().getIdentifier("cameraMonitorViewId", "id", hardwareMap.appContext.getPackageName());
 
-        leftCamera = OpenCvCameraFactory.getInstance().createWebcam(hardwareMap.get(WebcamName.class, "LeftCamera"), cameraMonitorViewId);
-        rightCamera = OpenCvCameraFactory.getInstance().createWebcam(hardwareMap.get(WebcamName.class, "RightCamera"), cameraMonitorViewId);
+        OpenCvCamera leftCamera = OpenCvCameraFactory.getInstance().createWebcam(hardwareMap.get(WebcamName.class, "LeftCamera"), cameraMonitorViewId);
+        OpenCvCamera rightCamera = OpenCvCameraFactory.getInstance().createWebcam(hardwareMap.get(WebcamName.class, "RightCamera"), cameraMonitorViewId);
 
         leftCamera.openCameraDevice();
         rightCamera.openCameraDevice();
@@ -32,7 +44,7 @@ public class SteroVision extends LinearOpMode {
         rightCamera.stopStreaming();
     }
 
-    class StereoProcessor {
+    static class StereoProcessor {
         Mat leftImage = new Mat();
         Mat rightImage = new Mat();
         Mat disparity = new Mat();
