@@ -112,10 +112,10 @@ public class BallBalancerUsingOpenCV extends LinearOpMode {
             double servoYPosition = Math.max(0, Math.min(1, 0.5 + angleY));
 
             // Z-axis motion
-            bouncePhase += 0.1;
-            if (bouncePhase > 2 * Math.PI) bouncePhase = 0;
-            double zOffset = 0.05 * Math.sin(bouncePhase);
-            double servoZPosition = Math.max(0, Math.min(1, 0.5 + zOffset));
+            bouncePhase += 0.1; // increases phase of sine wave and 0.1 controls speed of the bounce
+            if (bouncePhase > 2 * Math.PI) bouncePhase = 0; // resets phase of sine wave
+            double zOffset = 0.05 * Math.sin(bouncePhase); // computes vertical bounce amount by keeping it between 0.5 and -0.5
+            double servoZPosition = Math.max(0, Math.min(1, 0.5 + zOffset)); // uses zOffset to set the servo position
 
             servoX.setPosition(servoXPosition);
             servoY.setPosition(servoYPosition);
