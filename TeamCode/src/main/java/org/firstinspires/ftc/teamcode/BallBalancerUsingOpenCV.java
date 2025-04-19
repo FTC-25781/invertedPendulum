@@ -3,7 +3,6 @@ package org.firstinspires.ftc.teamcode;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.Servo;
-
 import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
 import org.opencv.core.*;
 import org.opencv.imgproc.Imgproc;
@@ -12,32 +11,26 @@ import org.openftc.easyopencv.*;
 import java.util.ArrayList;
 import java.util.List;
 
-@TeleOp(name = "Ball Balancer on Circular Platform")
+@TeleOp(name = "Ball Balancer with IK (Angle)")
 public class BallBalancerUsingOpenCV extends LinearOpMode {
-    private Servo servoX;
-    private Servo servoY;
-    private Servo servoZ;
 
+    private Servo servoX, servoY, servoZ;
     private OpenCvCamera webcam;
     private BallDetectionPipeline pipeline;
 
-    // PID constants
-    double kp = 0.005;
-    double ki = 0.0001;
-    double kd = 0.001;
+    // PID Constants
+    double kp = 0.005, ki = 0.0001, kd = 0.001;
+    double errorX_prev = 0, errorY_prev = 0;
+    double integralX = 0, integralY = 0;
 
-    double errorX_prev = 0;
-    double errorY_prev = 0;
-    double integralX = 0;
-    double integralY = 0;
+    // Platform settings
+    double originX = 320, originY = 180; // Center of 640x360 frame
+    double platformRadius = 150.0;
+    double maxAngleDegrees = 30.0; // Max tilt in degrees
 
-    double originX;
-    double originY;
-
-    private double bouncePhase = 0.0;
-
-    // Platform radius for inverse kinematics (assumes circular platform)
-    private double platformRadius = 150.0;  // in same units as PID output scaling
+    // Bounce phase
+    private double bouncePhase = 0;
+    long previousTime = System.currentTimeMillis();  // To track the previous time
 
     @Override
     public void runOpMode() throws InterruptedException {
@@ -48,7 +41,7 @@ public class BallBalancerUsingOpenCV extends LinearOpMode {
         int cameraMonitorViewId = hardwareMap.appContext.getResources()
                 .getIdentifier("cameraMonitorViewId", "id", hardwareMap.appContext.getPackageName());
         webcam = OpenCvCameraFactory.getInstance().createWebcam(
-                hardwareMap.get(WebcamName.class, "Webcam 1"), cameraMonitorViewId);
+                hardwareMap.get(WebcamName.class, "webcam"), cameraMonitorViewId);
 
         pipeline = new BallDetectionPipeline();
         webcam.setPipeline(pipeline);
@@ -70,52 +63,61 @@ public class BallBalancerUsingOpenCV extends LinearOpMode {
 
         telemetry.addData("Status", "Waiting for start");
         telemetry.update();
-
         waitForStart();
-
-        sleep(500);
 
         while (opModeIsActive()) {
             double ballX = pipeline.ballX;
             double ballY = pipeline.ballY;
 
-            // Auto-calibration: slowly adjust origin if ball is near center by calculating if within 20 pixels (compares pixel coordinates)
             if (Math.abs(ballX - originX) < 20 && Math.abs(ballY - originY) < 20) {
-                originX = 0.9 * originX + 0.1 * ballX; //keeps 90% of the origin and shifts 10% to the ball for new origin
+                originX = 0.9 * originX + 0.1 * ballX;
                 originY = 0.9 * originY + 0.1 * ballY;
             }
 
             double errorX = originX - ballX;
             double errorY = originY - ballY;
 
-            // PID for X-axis
-            integralX += errorX;
-            integralX = Math.max(-100, Math.min(100, integralX));
+            // PID Control
+            integralX = clamp(integralX + errorX, -100, 100);
+            integralY = clamp(integralY + errorY, -100, 100);
             double derivativeX = errorX - errorX_prev;
-            double outputX = kp * errorX + ki * integralX + kd * derivativeX;
-            errorX_prev = errorX;
-
-            // PID for Y-axis
-            integralY += errorY;
-            integralY = Math.max(-100, Math.min(100, integralY));
             double derivativeY = errorY - errorY_prev;
-            double outputY = kp * errorY + ki * integralY + kd * derivativeY;
+            errorX_prev = errorX;
             errorY_prev = errorY;
 
-            // Inverse kinematics:
-            // compute tilt angles by treating PID outputs as desired displacement
-            // and platformRadius as the horizontal distance for the angle calculation
-            double angleX = Math.atan2(outputX, platformRadius);
-            double angleY = Math.atan2(outputY, platformRadius);
+            double outputX = kp * errorX + ki * integralX + kd * derivativeX;
+            double outputY = kp * errorY + ki * integralY + kd * derivativeY;
 
-            double servoXPosition = Math.max(0, Math.min(1, 0.5 + angleX));
-            double servoYPosition = Math.max(0, Math.min(1, 0.5 + angleY));
+            // Inverse Kinematics: compute tilt angles in radians
+            double angleX_rad = Math.atan2(outputX, platformRadius);
+            double angleY_rad = Math.atan2(outputY, platformRadius);
 
-            // Z-axis motion
-            bouncePhase += 0.1; // increases phase of sine wave and 0.1 controls speed of the bounce
-            if (bouncePhase > 2 * Math.PI) bouncePhase = 0; // resets phase of sine wave, keeps bounce-phase between 0 and 2pi to avoid it growing forever
-            double zOffset = 0.05 * Math.sin(bouncePhase); // computes vertical bounce amount by keeping it between 0.5 and -0.5 since Math.sin(bouncePhase) gives value of -1 or 1
-            double servoZPosition = Math.max(0, Math.min(1, 0.5 + zOffset)); // uses zOffset to set the servo position
+            // Convert radians to degrees
+            double angleX_deg = Math.toDegrees(angleX_rad);
+            double angleY_deg = Math.toDegrees(angleY_rad);
+
+            // Clamp angles to safe tilt range
+            angleX_deg = clamp(angleX_deg, -maxAngleDegrees, maxAngleDegrees);
+            angleY_deg = clamp(angleY_deg, -maxAngleDegrees, maxAngleDegrees);
+
+            // Map angles to servo position range (0.0 to 1.0)
+            double servoXPosition = mapAngleToServo(angleX_deg, maxAngleDegrees);
+            double servoYPosition = mapAngleToServo(angleY_deg, maxAngleDegrees);
+
+            // Z Bounce (sine wave motion)
+            // Calculate delta time (time difference between current and previous loop)
+            long currentTime = System.currentTimeMillis();
+            long deltaTime = currentTime - previousTime;
+            previousTime = currentTime;  // Update the previous time
+
+            // Z Bounce Control (using deltaTime)
+            bouncePhase += 0.1 * deltaTime / 1000.0;  // Scale by deltaTime
+            if (bouncePhase > 2 * Math.PI) {
+                bouncePhase -= 2 * Math.PI;  // Ensure bouncePhase stays within a full sine wave cycle
+            }
+            // Calculate Z-axis servo position based on sine wave
+            double zOffset = 0.05 * Math.sin(bouncePhase);
+            double servoZPosition = clamp(0.5 + zOffset, 0, 1);
 
             servoX.setPosition(servoXPosition);
             servoY.setPosition(servoYPosition);
@@ -123,20 +125,28 @@ public class BallBalancerUsingOpenCV extends LinearOpMode {
 
             telemetry.addData("Ball X", ballX);
             telemetry.addData("Ball Y", ballY);
-            telemetry.addData("Error X", errorX);
-            telemetry.addData("Error Y", errorY);
-            telemetry.addData("Servo X Pos", servoXPosition);
-            telemetry.addData("Servo Y Pos", servoYPosition);
-            telemetry.addData("Servo Z Pos (Bounce)", servoZPosition);
+            telemetry.addData("Angle X (°)", angleX_deg);
+            telemetry.addData("Angle Y (°)", angleY_deg);
+            telemetry.addData("Servo X", servoXPosition);
+            telemetry.addData("Servo Y", servoYPosition);
+            telemetry.addData("Servo Z (Bounce)", servoZPosition);
             telemetry.update();
 
             sleep(50);
         }
     }
+    public static double clamp(double val, double min, double max) {
+        return Math.max(min, Math.min(max, val));
+    }
+
+    public static double mapAngleToServo(double angleDeg, double maxAngleDeg) {
+        // Map angle [-max, max] to [0, 1] servo position
+        return (angleDeg + maxAngleDeg) / (2 * maxAngleDeg);
+    }
 
     public class BallDetectionPipeline extends OpenCvPipeline {
-        public double ballX = 160;
-        public double ballY = 120;
+        public double ballX = 320;
+        public double ballY = 180;
 
         @Override
         public Mat processFrame(Mat input) {
@@ -167,14 +177,9 @@ public class BallBalancerUsingOpenCV extends LinearOpMode {
                 ballX = boundingRect.x + boundingRect.width / 2.0;
                 ballY = boundingRect.y + boundingRect.height / 2.0;
                 Imgproc.circle(input, new Point(ballX, ballY), 5, new Scalar(0, 255, 0), -1);
-            } else {
-                ballX = originX;
-                ballY = originY;
             }
 
             return input;
         }
     }
 }
-
-
