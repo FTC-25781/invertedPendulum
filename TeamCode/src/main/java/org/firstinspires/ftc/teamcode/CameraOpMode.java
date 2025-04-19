@@ -3,15 +3,23 @@ package org.firstinspires.ftc.teamcode;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.Servo;
-import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
 
+import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
+import org.opencv.core.Core;
+import org.opencv.core.Mat;
+import org.opencv.core.MatOfPoint;
+import org.opencv.core.Point;
+import org.opencv.core.Rect;
+import org.opencv.core.Scalar;
+import org.opencv.imgproc.Imgproc;
 import org.openftc.easyopencv.OpenCvCamera;
 import org.openftc.easyopencv.OpenCvCameraFactory;
 import org.openftc.easyopencv.OpenCvCameraRotation;
 import org.openftc.easyopencv.OpenCvPipeline;
 
-import org.opencv.core.*;
-import org.opencv.imgproc.Imgproc;
+import com.qualcomm.robotcore.hardware.ColorSensor;
+import com.qualcomm.hardware.rev.RevColorSensorV3;
+import android.graphics.Color;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,6 +32,8 @@ public class CameraOpMode extends LinearOpMode {
     private Servo vertServo;
     private Mat hsvMat = new Mat();
     private Mat thresholdMat = new Mat();
+    private RevColorSensorV3 colorSensor;
+    private float[] hsvValues = new float[3];
 
     // Blue color range in HSV
     private static final Scalar BLUE_LOWER = new Scalar(100, 150, 50);
@@ -64,6 +74,9 @@ public class CameraOpMode extends LinearOpMode {
         vertServo = hardwareMap.get(Servo.class, "verticalServo");
         vertServo.setPosition(vertServoPosition);
 
+        // names must match your Robot Configuration
+        colorSensor = hardwareMap.get(RevColorSensorV3.class, "colorSensor");
+
         // Set OpenCV pipeline
         cvCamera.setPipeline(new BlueBlockDetectionPipeline());
 
@@ -84,6 +97,21 @@ public class CameraOpMode extends LinearOpMode {
         waitForStart();
 
         while (opModeIsActive()) {
+            // get raw color
+            int r = colorSensor.red();
+            int g = colorSensor.green();
+            int b = colorSensor.blue();
+
+            // convert to HSV
+            Color.RGBToHSV(r, g, b, hsvValues);
+
+            // telemetry
+            telemetry.addLine("=== Color Sensor HSV ===");
+            telemetry.addData("H (°)", "%.1f", hsvValues[0]);
+            telemetry.addData("S (%%)", "%.1f", hsvValues[1] * 100);
+            telemetry.addData("V (%%)", "%.1f", hsvValues[2] * 100);
+
+
             if (lockedOn && lockedBlock != null) {
                 double objectCenterX = lockedBlock.x + (lockedBlock.width / 2.0);
                 double errorX = objectCenterX - CENTER_X;
@@ -192,10 +220,5 @@ public class CameraOpMode extends LinearOpMode {
             lockedOn = false;
             lockedBlock = null;
         }
-    }
-
-    // Clamp servo position between min and max values
-    private double clamp(double value, double min, double max) {
-        return Math.max(min, Math.min(max, value));
     }
 }
