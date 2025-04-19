@@ -11,7 +11,7 @@ import org.openftc.easyopencv.*;
 import java.util.ArrayList;
 import java.util.List;
 
-@TeleOp(name = "Ball Balancer with IK (Angle)")
+@TeleOp(name = "Ball Balancer Using OpenCV")
 public class BallBalancerUsingOpenCV extends LinearOpMode {
 
     private Servo servoX, servoY, servoZ;
@@ -24,13 +24,17 @@ public class BallBalancerUsingOpenCV extends LinearOpMode {
     double integralX = 0, integralY = 0;
 
     // Platform settings
-    double originX = 320, originY = 180; // Center of 640x360 frame
+    double originX = 320, originY = 180;
     double platformRadius = 150.0;
-    double maxAngleDegrees = 30.0; // Max tilt in degrees
+    double maxTiltDistance = 5.0; // cm: max linear tilt radius
 
-    // Bounce phase
+    // Arm link lengths (in cm)
+    double L1 = 11.2;
+    double L2 = 4.5;
+
+    // Bounce phase for Z axis
     private double bouncePhase = 0;
-    long previousTime = System.currentTimeMillis();  // To track the previous time
+    long previousTime = System.currentTimeMillis();
 
     @Override
     public void runOpMode() throws InterruptedException {
@@ -54,16 +58,17 @@ public class BallBalancerUsingOpenCV extends LinearOpMode {
 
             @Override
             public void onError(int errorCode) {
-                telemetry.addData("Error", "Camera open error: " + errorCode);
+                telemetry.addData("Camera Error", errorCode);
+                telemetry.update();
             }
         });
-
-        originX = 640 / 2.0;
-        originY = 360 / 2.0;
 
         telemetry.addData("Status", "Waiting for start");
         telemetry.update();
         waitForStart();
+
+        originX = 640 / 2.0;
+        originY = 360 / 2.0;
 
         while (opModeIsActive()) {
             double ballX = pipeline.ballX;
@@ -77,7 +82,6 @@ public class BallBalancerUsingOpenCV extends LinearOpMode {
             double errorX = originX - ballX;
             double errorY = originY - ballY;
 
-            // PID Control
             integralX = clamp(integralX + errorX, -100, 100);
             integralY = clamp(integralY + errorY, -100, 100);
             double derivativeX = errorX - errorX_prev;
@@ -88,60 +92,60 @@ public class BallBalancerUsingOpenCV extends LinearOpMode {
             double outputX = kp * errorX + ki * integralX + kd * derivativeX;
             double outputY = kp * errorY + ki * integralY + kd * derivativeY;
 
-            // Inverse Kinematics: compute tilt angles in radians
-            double angleX_rad = Math.atan2(outputX, platformRadius);
-            double angleY_rad = Math.atan2(outputY, platformRadius);
+            // Scale outputs to platform tilt range (in cm)
+            double tiltX_cm = clamp(outputX, -maxTiltDistance, maxTiltDistance);
+            double tiltY_cm = clamp(outputY, -maxTiltDistance, maxTiltDistance);
 
-            // Convert radians to degrees
-            double angleX_deg = Math.toDegrees(angleX_rad);
-            double angleY_deg = Math.toDegrees(angleY_rad);
+            // Inverse Kinematics for X and Y servos
+            double servoXPos = inverseKinematicsToServo(tiltX_cm, L1, L2);
+            double servoYPos = inverseKinematicsToServo(tiltY_cm, L1, L2);
 
-            // Clamp angles to safe tilt range
-            angleX_deg = clamp(angleX_deg, -maxAngleDegrees, maxAngleDegrees);
-            angleY_deg = clamp(angleY_deg, -maxAngleDegrees, maxAngleDegrees);
-
-            // Map angles to servo position range (0.0 to 1.0)
-            double servoXPosition = mapAngleToServo(angleX_deg, maxAngleDegrees);
-            double servoYPosition = mapAngleToServo(angleY_deg, maxAngleDegrees);
-
-            // Z Bounce (sine wave motion)
-            // Calculate delta time (time difference between current and previous loop)
+            // Z axis bounce
             long currentTime = System.currentTimeMillis();
             long deltaTime = currentTime - previousTime;
-            previousTime = currentTime;  // Update the previous time
-
-            // Z Bounce Control (using deltaTime)
-            bouncePhase += 0.1 * deltaTime / 1000.0;  // Scale by deltaTime
-            if (bouncePhase > 2 * Math.PI) {
-                bouncePhase -= 2 * Math.PI;  // Ensure bouncePhase stays within a full sine wave cycle
-            }
-            // Calculate Z-axis servo position based on sine wave
+            previousTime = currentTime;
+            bouncePhase += 0.1 * deltaTime / 1000.0;
+            if (bouncePhase > 2 * Math.PI) bouncePhase -= 2 * Math.PI;
             double zOffset = 0.05 * Math.sin(bouncePhase);
-            double servoZPosition = clamp(0.5 + zOffset, 0, 1);
+            double servoZPos = clamp(0.5 + zOffset, 0, 1);
 
-            servoX.setPosition(servoXPosition);
-            servoY.setPosition(servoYPosition);
-            servoZ.setPosition(servoZPosition);
+            // Set servos
+            servoX.setPosition(clamp(servoXPos, 0, 1));
+            servoY.setPosition(clamp(servoYPos, 0, 1));
+            servoZ.setPosition(servoZPos);
 
             telemetry.addData("Ball X", ballX);
             telemetry.addData("Ball Y", ballY);
-            telemetry.addData("Angle X (°)", angleX_deg);
-            telemetry.addData("Angle Y (°)", angleY_deg);
-            telemetry.addData("Servo X", servoXPosition);
-            telemetry.addData("Servo Y", servoYPosition);
-            telemetry.addData("Servo Z (Bounce)", servoZPosition);
+            telemetry.addData("Tilt X (cm)", tiltX_cm);
+            telemetry.addData("Tilt Y (cm)", tiltY_cm);
+            telemetry.addData("Servo X", servoXPos);
+            telemetry.addData("Servo Y", servoYPos);
+            telemetry.addData("Servo Z", servoZPos);
             telemetry.update();
 
             sleep(50);
         }
     }
+
     public static double clamp(double val, double min, double max) {
         return Math.max(min, Math.min(max, val));
     }
 
-    public static double mapAngleToServo(double angleDeg, double maxAngleDeg) {
-        // Map angle [-max, max] to [0, 1] servo position
-        return (angleDeg + maxAngleDeg) / (2 * maxAngleDeg);
+    // Convert IK shoulder angle to servo position
+    public double inverseKinematicsToServo(double x, double L1, double L2) {
+        double y = 0; // Planar 2D
+        double d = Math.sqrt(x * x + y * y);
+
+        // Prevent domain error
+        d = Math.min(d, L1 + L2 - 0.01);
+
+        double angle2 = Math.acos((x*x + y*y - L1*L1 - L2*L2) / (2 * L1 * L2));
+        double angle1 = Math.atan2(y, x) - Math.atan2(L2 * Math.sin(angle2), L1 + L2 * Math.cos(angle2));
+
+        double shoulderAngleDeg = Math.toDegrees(angle1);
+
+        // Map angle to servo (shoulder angle range assumed to be [-45°, 45°])
+        return (shoulderAngleDeg + 45) / 90.0;
     }
 
     public class BallDetectionPipeline extends OpenCvPipeline {
@@ -153,15 +157,14 @@ public class BallBalancerUsingOpenCV extends LinearOpMode {
             Mat hsvMat = new Mat();
             Imgproc.cvtColor(input, hsvMat, Imgproc.COLOR_RGB2HSV);
 
-            Scalar lowerBound = new Scalar(125, 50, 50); // Adjust to match ball color
-            Scalar upperBound = new Scalar(170, 255, 255);
+            Scalar lower = new Scalar(125, 50, 50);  // Tune for ball color
+            Scalar upper = new Scalar(170, 255, 255);
 
             Mat mask = new Mat();
-            Core.inRange(hsvMat, lowerBound, upperBound, mask);
+            Core.inRange(hsvMat, lower, upper, mask);
 
             List<MatOfPoint> contours = new ArrayList<>();
-            Mat hierarchy = new Mat();
-            Imgproc.findContours(mask, contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
+            Imgproc.findContours(mask, contours, new Mat(), Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
 
             double maxArea = 0;
             Rect boundingRect = null;
