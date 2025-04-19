@@ -113,8 +113,8 @@ public class BallBalancerUsingOpenCV extends LinearOpMode {
 
             // Z-axis motion
             bouncePhase += 0.1; // increases phase of sine wave and 0.1 controls speed of the bounce
-            if (bouncePhase > 2 * Math.PI) bouncePhase = 0; // resets phase of sine wave
-            double zOffset = 0.05 * Math.sin(bouncePhase); // computes vertical bounce amount by keeping it between 0.5 and -0.5
+            if (bouncePhase > 2 * Math.PI) bouncePhase = 0; // resets phase of sine wave, keeps bounce-phase between 0 and 2pi to avoid it growing forever
+            double zOffset = 0.05 * Math.sin(bouncePhase); // computes vertical bounce amount by keeping it between 0.5 and -0.5 since Math.sin(bouncePhase) gives value of -1 or 1
             double servoZPosition = Math.max(0, Math.min(1, 0.5 + zOffset)); // uses zOffset to set the servo position
 
             servoX.setPosition(servoXPosition);
@@ -143,8 +143,9 @@ public class BallBalancerUsingOpenCV extends LinearOpMode {
             Mat hsvMat = new Mat();
             Imgproc.cvtColor(input, hsvMat, Imgproc.COLOR_RGB2HSV);
 
-            Scalar lowerBound = new Scalar(100, 100, 50); // Adjust to match ball color
-            Scalar upperBound = new Scalar(140, 255, 255);
+            Scalar lowerBound = new Scalar(125, 50, 50); // Adjust to match ball color
+            Scalar upperBound = new Scalar(170, 255, 255);
+
             Mat mask = new Mat();
             Core.inRange(hsvMat, lowerBound, upperBound, mask);
 
