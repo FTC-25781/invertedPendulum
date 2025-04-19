@@ -1,73 +1,86 @@
 package org.firstinspires.ftc.teamcode;
 
-import android.graphics.Color;
-
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
-import com.qualcomm.robotcore.hardware.ColorSensor;
 import com.qualcomm.robotcore.hardware.Servo;
 
 import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
-
+import org.opencv.core.Core;
+import org.opencv.core.Mat;
+import org.opencv.core.MatOfPoint;
+import org.opencv.core.Point;
+import org.opencv.core.Rect;
+import org.opencv.core.Scalar;
+import org.opencv.imgproc.Imgproc;
 import org.openftc.easyopencv.OpenCvCamera;
 import org.openftc.easyopencv.OpenCvCameraFactory;
 import org.openftc.easyopencv.OpenCvCameraRotation;
 import org.openftc.easyopencv.OpenCvPipeline;
 
-import org.opencv.core.*;
-import org.opencv.imgproc.Imgproc;
+import com.qualcomm.robotcore.hardware.ColorSensor;
+import com.qualcomm.hardware.rev.RevColorSensorV3;
+import android.graphics.Color;
 
 import java.util.ArrayList;
 import java.util.List;
 
-@TeleOp(name = "Color Sensor + Camera Lock", group = "Linear Opmode")
+@TeleOp(name = "Object Lock", group = "Linear Opmode")
 public class CameraOpMode extends LinearOpMode {
 
     private OpenCvCamera cvCamera;
     private Servo spinServo;
     private Servo vertServo;
-    private ColorSensor colorSensor;
-
     private Mat hsvMat = new Mat();
     private Mat thresholdMat = new Mat();
+    private RevColorSensorV3 colorSensor;
+    private float[] hsvValues = new float[3];
 
-    private float[] liveHSV = new float[3];
-    private Scalar lowerHSV = new Scalar(100, 150, 50);
-    private Scalar upperHSV = new Scalar(140, 255, 255);
+    // Blue color range in HSV
+    private static final Scalar BLUE_LOWER = new Scalar(100, 150, 50);
+    private static final Scalar BLUE_UPPER = new Scalar(140, 255, 255);
 
+    // Servo range and initial position
     private double spinServoPosition = 0.5;
     private double vertServoPosition = 0.5;
 
+    // Frame dimensions and center
     private final int FRAME_WIDTH = 640;
     private final int FRAME_HEIGHT = 480;
     private final int CENTER_X = FRAME_WIDTH / 2;
     private final int CENTER_Y = FRAME_HEIGHT / 2;
+
+    // Dead zone for error margin
     private final int DEAD_ZONE = 50;
+
+    // Servo correction step (slow, smooth adjustments)
     private final double CORRECTION_STEP = 0.005;
 
+    // Locking variables
     private boolean lockedOn = false;
     private Rect lockedBlock = null;
 
-    private BlueBlockDetectionPipeline pipeline = new BlueBlockDetectionPipeline();
-
     @Override
     public void runOpMode() {
+        // Initialize webcam
         int cameraMonitorViewId = hardwareMap.appContext.getResources().getIdentifier(
                 "cameraMonitorViewId", "id", hardwareMap.appContext.getPackageName());
-
         cvCamera = OpenCvCameraFactory.getInstance().createWebcam(
                 hardwareMap.get(WebcamName.class, "Webcam 1"), cameraMonitorViewId);
 
+        // Initialize servo
         spinServo = hardwareMap.get(Servo.class, "horizontalServo");
-        spinServo.setPosition(spinServoPosition);
+        spinServo.setPosition(spinServoPosition);  // Set initial position
 
         vertServo = hardwareMap.get(Servo.class, "verticalServo");
         vertServo.setPosition(vertServoPosition);
 
-        colorSensor = hardwareMap.get(ColorSensor.class, "colorSensor");
+        // names must match your Robot Configuration
+        colorSensor = hardwareMap.get(RevColorSensorV3.class, "colorSensor");
 
-        cvCamera.setPipeline(pipeline);
+        // Set OpenCV pipeline
+        cvCamera.setPipeline(new BlueBlockDetectionPipeline());
 
+        // Open camera asynchronously
         cvCamera.openCameraDeviceAsync(new OpenCvCamera.AsyncCameraOpenListener() {
             @Override
             public void onOpened() {
@@ -84,21 +97,20 @@ public class CameraOpMode extends LinearOpMode {
         waitForStart();
 
         while (opModeIsActive()) {
-            // Get live RGB values and convert to HSV
-            int r = colorSensor.red() * 8;
-            int g = colorSensor.green() * 8;
-            int b = colorSensor.blue() * 8;
-            Color.RGBToHSV(r, g, b, liveHSV);
+            // get raw color
+            int r = colorSensor.red();
+            int g = colorSensor.green();
+            int b = colorSensor.blue();
 
-            float hue = liveHSV[0];       // 0-360
-            float sat = liveHSV[1];       // 0-1
-            float val = liveHSV[2];       // 0-1
+            // convert to HSV
+            Color.RGBToHSV(r, g, b, hsvValues);
 
-            lowerHSV = new Scalar(hue - 10, Math.max(50, sat * 255 - 50), Math.max(50, val * 255 - 50));
-            upperHSV = new Scalar(hue + 10, Math.min(255, sat * 255 + 50), Math.min(255, val * 255 + 50));
+            // telemetry
+            telemetry.addLine("=== Color Sensor HSV ===");
+            telemetry.addData("H (°)", "%.1f", hsvValues[0]);
+            telemetry.addData("S (%%)", "%.1f", hsvValues[1] * 100);
+            telemetry.addData("V (%%)", "%.1f", hsvValues[2] * 100);
 
-            // Send HSV to pipeline
-            pipeline.setHSVRange(lowerHSV, upperHSV);
 
             if (lockedOn && lockedBlock != null) {
                 double objectCenterX = lockedBlock.x + (lockedBlock.width / 2.0);
@@ -107,9 +119,8 @@ public class CameraOpMode extends LinearOpMode {
                 double dampingFactor = Math.max(0.2, 1.0 - (Math.abs(errorX) / (FRAME_WIDTH / 4.0)));
                 dynamicStep *= dampingFactor;
 
-                if (Math.abs(errorX) > DEAD_ZONE) {
-                    spinServoPosition += (errorX > 0) ? dynamicStep : -dynamicStep;
-                }
+                if (errorX > DEAD_ZONE) spinServoPosition += dynamicStep;
+                else if (errorX < -DEAD_ZONE) spinServoPosition -= dynamicStep;
 
                 double objectCenterY = lockedBlock.y + (lockedBlock.height / 2.0);
                 double errorY = objectCenterY - CENTER_Y;
@@ -117,17 +128,17 @@ public class CameraOpMode extends LinearOpMode {
                 double dampingFactorY = Math.max(0.2, 1.0 - (Math.abs(errorY) / (FRAME_HEIGHT / 4.0)));
                 dynamicStepY *= dampingFactorY;
 
-                if (Math.abs(errorY) > DEAD_ZONE) {
-                    vertServoPosition += (errorY > 0) ? dynamicStepY : -dynamicStepY;
-                }
+                if (errorY > DEAD_ZONE) vertServoPosition += dynamicStepY;
+                else if (errorY < -DEAD_ZONE) vertServoPosition -= dynamicStepY;
 
-                spinServo.setPosition(spinServoPosition / 5 + 0.5);
-                vertServo.setPosition(vertServoPosition / 5 + 0.5);
+                spinServo.setPosition(spinServoPosition);
+                vertServo.setPosition(vertServoPosition);
 
-                telemetry.addData("Object Offset X", objectCenterX - CENTER_X);
-                telemetry.addData("Object Offset Y", objectCenterY - CENTER_Y);
-                telemetry.addData("HSV", "H: %.1f S: %.1f V: %.1f", hue, sat, val);
                 telemetry.addData("Locked On", "Yes");
+                telemetry.addData("Object Center X", objectCenterX - CENTER_X);
+                telemetry.addData("Object Center Y", objectCenterY - CENTER_Y);
+                telemetry.addData("Servo Position X", spinServoPosition);
+                telemetry.addData("Servo Position Y", vertServoPosition);
             } else {
                 telemetry.addData("Locked On", "No");
             }
@@ -136,28 +147,26 @@ public class CameraOpMode extends LinearOpMode {
         }
     }
 
+    // OpenCV pipeline to detect blue objects
     private class BlueBlockDetectionPipeline extends OpenCvPipeline {
-        private Scalar lowerHSV = new Scalar(100, 150, 50);
-        private Scalar upperHSV = new Scalar(140, 255, 255);
-
-        public void setHSVRange(Scalar lower, Scalar upper) {
-            this.lowerHSV = lower;
-            this.upperHSV = upper;
-        }
 
         @Override
         public Mat processFrame(Mat input) {
             Imgproc.cvtColor(input, hsvMat, Imgproc.COLOR_RGB2HSV);
-            Core.inRange(hsvMat, lowerHSV, upperHSV, thresholdMat);
 
+            // Create binary mask for blue detection
+            Core.inRange(hsvMat, BLUE_LOWER, BLUE_UPPER, thresholdMat);
+
+            // Find contours in the thresholded image
             List<MatOfPoint> contours = new ArrayList<>();
             Mat hierarchy = new Mat();
             Imgproc.findContours(thresholdMat, contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
 
-            if (!contours.isEmpty()) {
+            if (contours.size() > 0) {
                 double maxArea = 0;
                 int maxAreaIndex = -1;
 
+                // Find largest contour
                 for (int i = 0; i < contours.size(); i++) {
                     double area = Imgproc.contourArea(contours.get(i));
                     if (area > maxArea) {
@@ -169,6 +178,8 @@ public class CameraOpMode extends LinearOpMode {
                 if (maxAreaIndex >= 0) {
                     lockedBlock = Imgproc.boundingRect(contours.get(maxAreaIndex));
                     lockedOn = true;
+
+                    // Draw bounding box, center point, and axis
                     drawAxisAndCenter(input);
                     drawBoundingBoxAndCenter(input, lockedBlock);
                 } else {
@@ -182,19 +193,29 @@ public class CameraOpMode extends LinearOpMode {
             return input;
         }
 
+        // Draw bounding box and center point
         private void drawBoundingBoxAndCenter(Mat input, Rect block) {
+            // Draw bounding box
             Imgproc.rectangle(input, block.tl(), block.br(), new Scalar(0, 255, 0), 2);
-            int centerX = block.x + (block.width / 2);
-            int centerY = block.y + (block.height / 2);
-            Imgproc.circle(input, new Point(centerX, centerY), 5, new Scalar(0, 0, 255), -1);
-            Imgproc.line(input, new Point(CENTER_X, CENTER_Y), new Point(centerX, centerY), new Scalar(0, 255, 0), 2);
+
+            // Draw center point of the object
+            int objectCenterX = block.x + (block.width / 2);
+            int objectCenterY = block.y + (block.height / 2);
+            Imgproc.circle(input, new Point(objectCenterX, objectCenterY), 5, new Scalar(0, 0, 255), -1);
+
+            // Draw line from (0,0) to object center
+            Imgproc.line(input, new Point(CENTER_X, CENTER_Y), new Point(objectCenterX, objectCenterY), new Scalar(0, 255, 0), 2);
         }
 
+        // Draw axis (coordinate plane) with (0,0) at the center
         private void drawAxisAndCenter(Mat input) {
+            // Draw X-axis
             Imgproc.line(input, new Point(0, CENTER_Y), new Point(FRAME_WIDTH, CENTER_Y), new Scalar(255, 0, 0), 1);
+            // Draw Y-axis
             Imgproc.line(input, new Point(CENTER_X, 0), new Point(CENTER_X, FRAME_HEIGHT), new Scalar(255, 0, 0), 1);
         }
 
+        // Reset lock when object is lost
         private void resetLock() {
             lockedOn = false;
             lockedBlock = null;
