@@ -16,7 +16,7 @@ import org.opencv.imgproc.Imgproc;
 import java.util.ArrayList;
 import java.util.List;
 
-@TeleOp(name = "Blue Object Lock with Servo X", group = "Linear Opmode")
+@TeleOp(name = "Object Lock", group = "Linear Opmode")
 public class CameraOpMode extends LinearOpMode {
 
     private OpenCvCamera cvCamera;
