@@ -41,7 +41,7 @@ public class CameraOpMode extends LinearOpMode {
 
     // Servo range and initial position
     private double spinServoPosition = 0.5;
-    private double vertServoPosition = 0.5;
+    private double vertServoPosition = 0.1;
 
     // Frame dimensions and center
     private final int FRAME_WIDTH = 640;
@@ -110,7 +110,6 @@ public class CameraOpMode extends LinearOpMode {
             telemetry.addData("H (°)", "%.1f", hsvValues[0]);
             telemetry.addData("S (%%)", "%.1f", hsvValues[1] * 100);
             telemetry.addData("V (%%)", "%.1f", hsvValues[2] * 100);
-
 
             if (lockedOn && lockedBlock != null) {
                 double objectCenterX = lockedBlock.x + (lockedBlock.width / 2.0);

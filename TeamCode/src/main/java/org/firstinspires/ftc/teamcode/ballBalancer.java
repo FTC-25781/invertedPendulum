@@ -20,11 +20,11 @@ public class ballBalancer extends LinearOpMode {
     private double increment = 0.01;
 
     // PID coefficients
-    private double kP = 0.0001; // 0.001
+    private double kP = 0.00001; // 0.001
     private double kI = 0.0;
-    private double kD = 0.01;
+    private double kD = 0.000;
 
-    private double targetDistance = 10.0;
+    private double targetDistance = 15.0;
     private double previousError = 0;
     private double integral = 0;
 
@@ -45,7 +45,7 @@ public class ballBalancer extends LinearOpMode {
             // PID Part
             double currentDistance = distanceSensor.getDistance(DistanceUnit.CM);
             double error = targetDistance - currentDistance;
-            if(Math.abs(error) < 1) {
+            if(Math.abs(error) < 2) {
                 error = 0;
             }
             integral += error;

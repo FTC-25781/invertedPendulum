@@ -16,9 +16,9 @@ public class platformController {
     public platformController(HardwareMap hardwareMap, RobotKinematics model, Telemetry telemetry) {
         this.robot = model;
         this.telemetry = telemetry;
-        this.s1 = hardwareMap.get(Servo.class, "servo0");
-        this.s2 = hardwareMap.get(Servo.class, "servo1");
-        this.s3 = hardwareMap.get(Servo.class, "servo2");
+        this.s1 = hardwareMap.get(Servo.class, "servoX");
+        this.s2 = hardwareMap.get(Servo.class, "servoY");
+        this.s3 = hardwareMap.get(Servo.class, "servoZ");
         initialize();
     }
 

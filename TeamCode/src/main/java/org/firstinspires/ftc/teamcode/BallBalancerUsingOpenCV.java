@@ -96,7 +96,7 @@ public class BallBalancerUsingOpenCV extends LinearOpMode {
             double tiltX_cm = clamp(outputX, -maxTiltDistance, maxTiltDistance);
             double tiltY_cm = clamp(outputY, -maxTiltDistance, maxTiltDistance);
 
-            // Inverse Kinematics for X and Y servos
+            // Inverse Kinematics for X servos and Y servos
             double servoXPos = inverseKinematicsToServo(tiltX_cm, L1, L2);
             double servoYPos = inverseKinematicsToServo(tiltY_cm, L1, L2);
 
