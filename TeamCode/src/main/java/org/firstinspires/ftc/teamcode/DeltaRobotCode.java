@@ -36,8 +36,8 @@ public class DeltaRobotCode extends OpMode {
         targetDistanceZ = gamepad1.right_trigger;
 
         double outputX = pidX.PIDCalculation(targetDistanceX, currentDistanceX);
-        double outputY = pidX.PIDCalculation(targetDistanceY, currentDistanceY);
-        double outputZ = pidX.PIDCalculation(targetDistanceZ, currentDistanceZ);
+        double outputY = pidY.PIDCalculation(targetDistanceY, currentDistanceY);
+        double outputZ = pidZ.PIDCalculation(targetDistanceZ, currentDistanceZ);
 
         currentDistanceX += outputX;
         currentDistanceY += outputY;
