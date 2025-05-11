@@ -11,7 +11,7 @@ import org.openftc.easyopencv.*;
 import java.util.ArrayList;
 import java.util.List;
 
-@TeleOp(name = "Ball Balancer Using OpenCV")
+@TeleOp(name = "Ball Balancer Using OpenCV (3DOF)")
 public class BallBalancerUsingOpenCV extends LinearOpMode {
 
     private Servo servoX, servoY, servoZ;
@@ -25,7 +25,6 @@ public class BallBalancerUsingOpenCV extends LinearOpMode {
 
     // Platform settings
     double originX = 320, originY = 180;
-    double platformRadius = 150.0;
     double maxTiltDistance = 5.0; // cm: max linear tilt radius
 
     // Arm link lengths (in cm)
@@ -92,27 +91,31 @@ public class BallBalancerUsingOpenCV extends LinearOpMode {
             double outputX = kp * errorX + ki * integralX + kd * derivativeX;
             double outputY = kp * errorY + ki * integralY + kd * derivativeY;
 
-            // Scale outputs to platform tilt range (in cm)
             double tiltX_cm = clamp(outputX, -maxTiltDistance, maxTiltDistance);
             double tiltY_cm = clamp(outputY, -maxTiltDistance, maxTiltDistance);
 
-            // Inverse Kinematics for X servos and Y servos
-            double servoXPos = inverseKinematicsToServo(tiltX_cm, L1, L2);
-            double servoYPos = inverseKinematicsToServo(tiltY_cm, L1, L2);
+            // Calculate 3DOF inverse kinematics
+            double[] servoAngles = inverseKinematics(tiltX_cm, tiltY_cm, 0);
+            double servoXPos = angleToServoPosition(servoAngles[0]); // 0 degrees
+            double servoYPos = angleToServoPosition(servoAngles[1]); // 120 degrees
+            double servoZPosXY = angleToServoPosition(servoAngles[2]); // 240 degrees
 
-            // Z axis bounce
+            // Add vertical Z bounce
             long currentTime = System.currentTimeMillis();
             long deltaTime = currentTime - previousTime;
             previousTime = currentTime;
             bouncePhase += 0.1 * deltaTime / 1000.0;
             if (bouncePhase > 2 * Math.PI) bouncePhase -= 2 * Math.PI;
-            double zOffset = 0.05 * Math.sin(bouncePhase);
-            double servoZPos = clamp(0.5 + zOffset, 0, 1);
+            double zOffset = 0.05 * Math.sin(bouncePhase); // up to ±0.05
+            double servoZBounce = clamp(0.5 + zOffset, 0, 1);
 
-            // Set servos
+            // Final Z servo value combines IK and bounce
+            double finalServoZ = (servoZPosXY + servoZBounce) / 2.0;
+
+            // Set servo positions
             servoX.setPosition(clamp(servoXPos, 0, 1));
             servoY.setPosition(clamp(servoYPos, 0, 1));
-            servoZ.setPosition(servoZPos);
+            servoZ.setPosition(clamp(finalServoZ, 0, 1));
 
             telemetry.addData("Ball X", ballX);
             telemetry.addData("Ball Y", ballY);
@@ -120,7 +123,7 @@ public class BallBalancerUsingOpenCV extends LinearOpMode {
             telemetry.addData("Tilt Y (cm)", tiltY_cm);
             telemetry.addData("Servo X", servoXPos);
             telemetry.addData("Servo Y", servoYPos);
-            telemetry.addData("Servo Z", servoZPos);
+            telemetry.addData("Servo Z", finalServoZ);
             telemetry.update();
 
             sleep(50);
@@ -131,21 +134,37 @@ public class BallBalancerUsingOpenCV extends LinearOpMode {
         return Math.max(min, Math.min(max, val));
     }
 
-    // Convert IK shoulder angle to servo position
-    public double inverseKinematicsToServo(double x, double L1, double L2) {
-        double y = 0; // Planar 2D
-        double d = Math.sqrt(x * x + y * y);
+    // inverse kinematics
+    public double[] inverseKinematics(double x, double y, double z) {
+        double[] angles = new double[3]; // array for 3 angles
+        double[][] vectorDirs = { // vector directions
+                {1, 0},                            // 0 degrees
+                {-0.5, Math.sqrt(3) / 2},          // 120 degrees
+                {-0.5, -Math.sqrt(3) / 2}          // 240 degrees
+        };
 
-        // Prevent domain error
+        for (int i = 0; i < 3; i++) {
+            double dx = x * vectorDirs[i][0] + y * vectorDirs[i][1];  // projects desired output to axis of servo (i)
+            angles[i] = IKAngle(dx, L1, L2); // calculates servo angles
+        }
+
+        return angles;
+    }
+
+    // Inverse kinematics for 1 arm
+    public double IKAngle(double x, double L1, double L2) {
+        double y = 0;
+        double d = Math.sqrt(x * x + y * y);
         d = Math.min(d, L1 + L2 - 0.01);
 
-        double angle2 = Math.acos((x*x + y*y - L1*L1 - L2*L2) / (2 * L1 * L2));
+        double angle2 = Math.acos((x * x + y * y - L1 * L1 - L2 * L2) / (2 * L1 * L2));
         double angle1 = Math.atan2(y, x) - Math.atan2(L2 * Math.sin(angle2), L1 + L2 * Math.cos(angle2));
+        return Math.toDegrees(angle1);
+    }
 
-        double shoulderAngleDeg = Math.toDegrees(angle1);
-
-        // Map angle to servo (shoulder angle range assumed to be [-45°, 45°])
-        return (shoulderAngleDeg + 45) / 90.0;
+    // Convert angle to servo position
+    public double angleToServoPosition(double angleDeg) {
+        return clamp((angleDeg + 45) / 90.0, 0, 1);
     }
 
     public class BallDetectionPipeline extends OpenCvPipeline {
@@ -157,7 +176,7 @@ public class BallBalancerUsingOpenCV extends LinearOpMode {
             Mat hsvMat = new Mat();
             Imgproc.cvtColor(input, hsvMat, Imgproc.COLOR_RGB2HSV);
 
-            Scalar lower = new Scalar(125, 50, 50);  // Tune for ball color
+            Scalar lower = new Scalar(125, 50, 50);  // Adjust to your ball color
             Scalar upper = new Scalar(170, 255, 255);
 
             Mat mask = new Mat();
