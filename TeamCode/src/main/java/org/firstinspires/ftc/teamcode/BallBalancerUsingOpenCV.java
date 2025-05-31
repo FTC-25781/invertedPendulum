@@ -138,14 +138,15 @@ public class BallBalancerUsingOpenCV extends LinearOpMode {
     public double[] inverseKinematics(double x, double y, double z) {
         double[] angles = new double[3]; // array for 3 angles
         double[][] vectorDirs = { // vector directions
-                {1, 0},                            // 0 degrees
+                {1, 0},                            // 0 degrees (uses unit circle trigonometry for the values)
                 {-0.5, Math.sqrt(3) / 2},          // 120 degrees
                 {-0.5, -Math.sqrt(3) / 2}          // 240 degrees
         };
 
         for (int i = 0; i < 3; i++) {
-            double dx = x * vectorDirs[i][0] + y * vectorDirs[i][1];  // projects desired output to axis of servo (i)
-            angles[i] = IKAngle(dx, L1, L2); // calculates servo angles
+            double dx = x * vectorDirs[i][0] + y * vectorDirs[i][1];  // projects desired (x,y) platform position along the axis of servo (i)
+            // computes how much of the motion is along servo's direction using a dot product with the vector
+            angles[i] = IKAngle(dx, L1, L2); // calculates servo angles using the projected dx and link lengths
         }
 
         return angles;
@@ -153,12 +154,12 @@ public class BallBalancerUsingOpenCV extends LinearOpMode {
 
     // Inverse kinematics for 1 arm
     public double IKAngle(double x, double L1, double L2) {
-        double y = 0;
-        double d = Math.sqrt(x * x + y * y);
-        d = Math.min(d, L1 + L2 - 0.01);
+        double y = 0; // solving this in 1D along the servo's projected axis
+        double d = Math.sqrt(x * x + y * y); // uses distance formula to calculate distance from origin to target position (x,y)
+        d = Math.min(d, L1 + L2 - 0.01); // ensures target is within arm's reach because the arm can reach a max of L1 + L2 so subtract 0.01 to avoid math errors
 
-        double angle2 = Math.acos((x * x + y * y - L1 * L1 - L2 * L2) / (2 * L1 * L2));
-        double angle1 = Math.atan2(y, x) - Math.atan2(L2 * Math.sin(angle2), L1 + L2 * Math.cos(angle2));
+        double angle2 = Math.acos((x * x + y * y - L1 * L1 - L2 * L2) / (2 * L1 * L2)); // uses re-arranged law of cosines
+        double angle1 = Math.atan2(y, x) - Math.atan2(L2 * Math.sin(angle2), L1 + L2 * Math.cos(angle2)); // Math.atan2(y, x) gives angle from the origin to target position (x,y) and we subtract the offset from the arm's bend
         return Math.toDegrees(angle1);
     }
 
