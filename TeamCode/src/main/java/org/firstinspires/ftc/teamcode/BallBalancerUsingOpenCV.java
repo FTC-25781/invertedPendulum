@@ -11,7 +11,7 @@ import org.openftc.easyopencv.*;
 import java.util.ArrayList;
 import java.util.List;
 
-@TeleOp(name = "Ball Balancer Using OpenCV (3DOF)")
+@TeleOp(name = "Ball Balancer Using OpenCV")
 public class BallBalancerUsingOpenCV extends LinearOpMode {
 
     private Servo servoX, servoY, servoZ;
@@ -94,7 +94,7 @@ public class BallBalancerUsingOpenCV extends LinearOpMode {
             double tiltX_cm = clamp(outputX, -maxTiltDistance, maxTiltDistance);
             double tiltY_cm = clamp(outputY, -maxTiltDistance, maxTiltDistance);
 
-            // Calculate 3DOF inverse kinematics
+
             double[] servoAngles = inverseKinematics(tiltX_cm, tiltY_cm, 0);
             double servoXPos = angleToServoPosition(servoAngles[0]); // 0 degrees
             double servoYPos = angleToServoPosition(servoAngles[1]); // 120 degrees
@@ -106,7 +106,7 @@ public class BallBalancerUsingOpenCV extends LinearOpMode {
             previousTime = currentTime;
             bouncePhase += 0.1 * deltaTime / 1000.0;
             if (bouncePhase > 2 * Math.PI) bouncePhase -= 2 * Math.PI;
-            double zOffset = 0.05 * Math.sin(bouncePhase); // up to ±0.05
+            double zOffset = 0.05 * Math.sin(bouncePhase); // up to +0.05, -0.05
             double servoZBounce = clamp(0.5 + zOffset, 0, 1);
 
             // Final Z servo value combines IK and bounce
@@ -176,8 +176,8 @@ public class BallBalancerUsingOpenCV extends LinearOpMode {
             Mat hsvMat = new Mat();
             Imgproc.cvtColor(input, hsvMat, Imgproc.COLOR_RGB2HSV);
 
-            Scalar lower = new Scalar(125, 50, 50);  // Adjust to your ball color
-            Scalar upper = new Scalar(170, 255, 255);
+            Scalar lower = new Scalar(10, 100, 20);
+            Scalar upper = new Scalar(25, 255, 255);
 
             Mat mask = new Mat();
             Core.inRange(hsvMat, lower, upper, mask);
